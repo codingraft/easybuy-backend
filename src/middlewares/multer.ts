@@ -1,5 +1,11 @@
 import multer from 'multer';
 import { v4 as uuid } from 'uuid';
+import { existsSync, mkdirSync } from 'fs';
+
+// Ensure uploads directory exists
+if (!existsSync('uploads')) {
+  mkdirSync('uploads', { recursive: true });
+}
 
 const storage = multer.diskStorage({
    destination(req, file, callback) {

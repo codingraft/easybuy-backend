@@ -12,9 +12,11 @@ export const createPaymentIntent = TryCatch(async (req, res, next) => {
     return next(new ErrorHandler("Please enter amount", 400));
   }
 
+  console.log("Razorpay Key ID:", process.env.RAZORPAY_KEY_ID);
+  
   const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID || "",
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
+    key_id: process.env.RAZORPAY_KEY_ID?.trim() || "",
+    key_secret: process.env.RAZORPAY_KEY_SECRET?.trim() || "",
   });
 
   const options = {
@@ -23,17 +25,16 @@ export const createPaymentIntent = TryCatch(async (req, res, next) => {
   };
 
   try {
-    
     const order = await razorpay.orders.create(options);
     return res
     .status(201)
     .json({ success: true, order });
   } catch (error: any) {
-    return next(new ErrorHandler(error.message, 400));
-    
+    console.error("Razorpay Error:", error);
+    return next(new ErrorHandler(error.message || "Failed to create order", 400));
   }
 
-});
+}); 
 export const verifyPayment = TryCatch(async (req, res, next) => {
  console.log("req.body",req.body);
   const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "");
