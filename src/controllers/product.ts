@@ -101,12 +101,15 @@ export const newProduct = TryCatch(
       return next(new ErrorHandler("Please fill all the fields", 400));
     }
 
+    // Use forward slashes for consistency across platforms
+    const imagePath = image.path.replace(/\\/g, '/');
+
     const product = await Product.create({
       name,
       price,
       stock,
       category: category.toLowerCase(),
-      image: image.path,
+      image: imagePath,
     });
 
     if (!product) {
@@ -134,9 +137,10 @@ export const updateProduct = TryCatch(async (req, res, next) => {
 
   if (image) {
     rm(product.image, () => {
-      console.log("Image deleted");
+      console.log("Old image deleted");
     });
-    product.image = image.path;
+    // Use forward slashes for consistency
+    product.image = image.path.replace(/\\/g, '/');
   }
 
   if (name) product.name = name;
