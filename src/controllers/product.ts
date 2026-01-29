@@ -7,9 +7,10 @@ import {
 } from "../types/type.js";
 import ErrorHandler from "../utils/utility-class.js";
 import { Product } from "../models/products.model.js";
-import { rm } from "fs";
 import { cache } from "../app.js";
 import { invalidateCache } from "../utils/db.js";
+import cloudinary from "../config/cloudinary.js";
+import { Readable } from "stream";
 // import { faker } from '@faker-js/faker'
 
 export const getLatestProducts = TryCatch(async (req, res, next) => {
@@ -95,21 +96,32 @@ export const newProduct = TryCatch(
       return next(new ErrorHandler("Please upload an image", 400));
     }
     if (!name || !price || !stock || !category) {
-      rm(image.path, () => {
-        console.log("Image deleted");
-      });
       return next(new ErrorHandler("Please fill all the fields", 400));
     }
 
-    // Use forward slashes for consistency across platforms
-    const imagePath = image.path.replace(/\\/g, '/');
+    // Upload image to Cloudinary
+    const uploadResult = await new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'easybuy-products',
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      
+      const bufferStream = Readable.from(image.buffer);
+      bufferStream.pipe(uploadStream);
+    });
 
     const product = await Product.create({
       name,
       price,
       stock,
       category: category.toLowerCase(),
-      image: imagePath,
+      image: uploadResult.secure_url,
     });
 
     if (!product) {
@@ -136,11 +148,32 @@ export const updateProduct = TryCatch(async (req, res, next) => {
   if (!product) return next(new ErrorHandler("Product Not Found", 404));
 
   if (image) {
-    rm(product.image, () => {
-      console.log("Old image deleted");
+    // Delete old image from Cloudinary
+    if (product.image) {
+      const publicId = product.image.split('/').pop()?.split('.')[0];
+      if (publicId) {
+        await cloudinary.uploader.destroy(`easybuy-products/${publicId}`);
+      }
+    }
+
+    // Upload new image to Cloudinary
+    const uploadResult = await new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'easybuy-products',
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      
+      const bufferStream = Readable.from(image.buffer);
+      bufferStream.pipe(uploadStream);
     });
-    // Use forward slashes for consistency
-    product.image = image.path.replace(/\\/g, '/');
+
+    product.image = uploadResult.secure_url;
   }
 
   if (name) product.name = name;
@@ -168,9 +201,13 @@ export const deleteProduct = TryCatch(async (req, res, next) => {
     return next(new ErrorHandler("Product not found", 404));
   }
 
-  rm(product.image, () => {
-    console.log("Image deleted");
-  });
+  // Delete image from Cloudinary
+  if (product.image) {
+    const publicId = product.image.split('/').pop()?.split('.')[0];
+    if (publicId) {
+      await cloudinary.uploader.destroy(`easybuy-products/${publicId}`);
+    }
+  }
 
   await product.deleteOne();
 
