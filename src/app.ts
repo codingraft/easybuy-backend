@@ -56,7 +56,7 @@ app.use("/api/v1/order", orderRouter);
 app.use("/api/v1/payment", paymentRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 
-app.use('/uploads', express.static('uploads'));
+// No need for static uploads folder - using Cloudinary
 
 
 

@@ -1,21 +1,18 @@
 import multer from 'multer';
-import { v4 as uuid } from 'uuid';
-import { existsSync, mkdirSync } from 'fs';
 
-// Ensure uploads directory exists
-if (!existsSync('uploads')) {
-  mkdirSync('uploads', { recursive: true });
-}
+// Use memory storage for Cloudinary
+const storage = multer.memoryStorage();
 
-const storage = multer.diskStorage({
-   destination(req, file, callback) {
-        callback(null, 'uploads/');
-   },
-   filename(req, file, callback) {
-     const id = uuid();
-     const extName = file.originalname.split('.').pop();
-        callback(null, `${id}.${extName}`);
-   },
-});
-
-export const singleUpload  = multer({ storage }).single('image');
+export const singleUpload = multer({ 
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+}).single('image');
