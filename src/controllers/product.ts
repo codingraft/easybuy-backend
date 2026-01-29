@@ -195,8 +195,10 @@ export const getAllProducts = TryCatch(
 
     const baseQuery: BaseQuery = {};
     if (search) {
+      // Escape special characters to prevent ReDoS
+      const sanitizedSearch = String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
       baseQuery.name = {
-        $regex: search,
+        $regex: sanitizedSearch,
         $options: "i", // case insensitive
       };
     }

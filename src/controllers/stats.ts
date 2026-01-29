@@ -30,149 +30,129 @@ export const getDashboardStats = TryCatch(async (req, res, next) => {
       end: new Date(today.getFullYear(), today.getMonth(), 0),
     };
 
-    const enfOfThisMonth = today;
-
-    const thisMonthProductsPromise = Product.find({
-      createdAt: {
-        $gte: thisMonth.start,
-        $lte: thisMonth.end,
-      },
+    const thisMonthProductsPromise = Product.countDocuments({
+      createdAt: { $gte: thisMonth.start, $lte: thisMonth.end },
     });
 
-    const lastMonthProductsPromise = Product.find({
-      createdAt: {
-        $gte: lastMonth.start,
-        $lte: lastMonth.end,
-      },
+    const lastMonthProductsPromise = Product.countDocuments({
+      createdAt: { $gte: lastMonth.start, $lte: lastMonth.end },
     });
 
-    const thisMonthUserPromise = User.find({
-      createdAt: {
-        $gte: thisMonth.start,
-        $lte: thisMonth.end,
-      },
+    const thisMonthUsersPromise = User.countDocuments({
+      createdAt: { $gte: thisMonth.start, $lte: thisMonth.end },
     });
 
-    const lastMonthUserPromise = User.find({
-      createdAt: {
-        $gte: lastMonth.start,
-        $lte: lastMonth.end,
-      },
+    const lastMonthUsersPromise = User.countDocuments({
+      createdAt: { $gte: lastMonth.start, $lte: lastMonth.end },
     });
 
-    const thisMonthOrdersPromise = Order.find({
-      createdAt: {
-        $gte: thisMonth.start,
-        $lte: thisMonth.end,
-      },
+    const thisMonthOrdersPromise = Order.countDocuments({
+      createdAt: { $gte: thisMonth.start, $lte: thisMonth.end },
     });
 
-    const lastMonthOrdersPromise = Order.find({
-      createdAt: {
-        $gte: lastMonth.start,
-        $lte: lastMonth.end,
-      },
+    const lastMonthOrdersPromise = Order.countDocuments({
+      createdAt: { $gte: lastMonth.start, $lte: lastMonth.end },
     });
 
-    const lastSixMonthsOrdersPromise = Order.find({
-      createdAt: {
-        $gte: sixMonthsAgo,
-        $lte: today,
-      },
-    });
+    const thisMonthRevenuePromise = Order.aggregate([
+      { $match: { createdAt: { $gte: thisMonth.start, $lte: thisMonth.end } } },
+      { $group: { _id: null, total: { $sum: "$total" } } },
+    ]);
 
-    const latestTransactionPromise = Order.find({})
-      .select(["orderItems", "discount", "total", "status"])
-      .limit(4);
+    const lastMonthRevenuePromise = Order.aggregate([
+      { $match: { createdAt: { $gte: lastMonth.start, $lte: lastMonth.end } } },
+      { $group: { _id: null, total: { $sum: "$total" } } },
+    ]);
 
     const [
-      thisMonthProducts,
-      lastMonthProducts,
-      thisMonthUsers,
-      lastMonthUsers,
-      thisMonthOrders,
-      lastMonthOrders,
+      thisMonthProductsCount,
+      lastMonthProductsCount,
+      thisMonthUsersCount,
+      lastMonthUsersCount,
+      thisMonthOrdersCount,
+      lastMonthOrdersCount,
+      thisMonthRevenue,
+      lastMonthRevenue,
       productsCount,
       usersCount,
-      allOrders,
-      lastSixMonthsOrders,
+      revenue,
+      lastSixMonthOrders,
       categories,
       maleUsersCount,
       latestTransactions,
     ] = await Promise.all([
       thisMonthProductsPromise,
       lastMonthProductsPromise,
-      thisMonthUserPromise,
-      lastMonthUserPromise,
+      thisMonthUsersPromise,
+      lastMonthUsersPromise,
       thisMonthOrdersPromise,
       lastMonthOrdersPromise,
+      thisMonthRevenuePromise,
+      lastMonthRevenuePromise,
       Product.countDocuments(),
       User.countDocuments(),
-      Order.find({}).select("total"),
-      lastSixMonthsOrdersPromise,
+      Order.aggregate([{ $group: { _id: null, total: { $sum: "$total" } } }]),
+      Order.aggregate([
+        { $match: { createdAt: { $gte: sixMonthsAgo, $lte: today } } },
+        {
+          $group: {
+            _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" } },
+            count: { $sum: 1 },
+            total: { $sum: "$total" },
+            monthNum: { $first: { $month: "$createdAt" } } // Keep month for sorting/filling
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
       Product.distinct("category"),
       User.countDocuments({ gender: "male" }),
-      latestTransactionPromise,
+      Order.find({}).select(["orderItems", "discount", "total", "status"]).limit(4),
     ]);
 
-    const thisMonthRevenue = thisMonthOrders.reduce(
-      (acc, order) => acc + (order.total || 0),
-      0
-    );
-
-    const lastMonthRevenue = lastMonthOrders.reduce(
-      (acc, order) => acc + (order.total || 0),
-      0
-    );
+    const thisMonthRevenueAmount = thisMonthRevenue[0]?.total || 0;
+    const lastMonthRevenueAmount = lastMonthRevenue[0]?.total || 0;
+    const totalRevenueAmount = revenue[0]?.total || 0;
 
     const changePercent = {
-      revenue: calculatePercentage(thisMonthRevenue, lastMonthRevenue),
+      revenue: calculatePercentage(thisMonthRevenueAmount, lastMonthRevenueAmount),
       product: calculatePercentage(
-        thisMonthProducts.length,
-        lastMonthProducts.length
+        thisMonthProductsCount,
+        lastMonthProductsCount
       ),
-      user: calculatePercentage(thisMonthUsers.length, lastMonthUsers.length),
+      user: calculatePercentage(thisMonthUsersCount, lastMonthUsersCount),
       order: calculatePercentage(
-        thisMonthOrders.length,
-        lastMonthOrders.length
+        thisMonthOrdersCount,
+        lastMonthOrdersCount
       ),
     };
-
-    const revenue = allOrders.reduce(
-      (acc, order) => acc + (order.total || 0),
-      0
-    );
 
     const count = {
-      revenue,
+      revenue: totalRevenueAmount,
       product: productsCount,
       user: usersCount,
-
-      order: allOrders.length,
+      order: await Order.countDocuments(),
     };
 
-    const orderMonthCounts = getChartData({
-      length: 6,
-      docArr: lastSixMonthsOrders,
-      today,
-    })
-    const orderMonthlyRevenue = getChartData({
-      length: 6,
-      docArr: lastSixMonthsOrders,
-      today,
-      property: "total",
+    const orderMonthCounts = new Array(6).fill(0);
+    const orderMonthlyRevenue = new Array(6).fill(0);
+
+    lastSixMonthOrders.forEach((data) => {
+      // Map aggregation result to the last 6 months buckets
+      // This logic is simplified; in a robust app we'd map (month, year) to the array index correctly
+      // Assuming "sixMonthsAgo" logic matches the buckets
+      const creationDate = new Date();
+      creationDate.setMonth(data._id.month - 1);
+      creationDate.setFullYear(data._id.year);
+
+      const monthDiff = (today.getMonth() - creationDate.getMonth() + 12) % 12;
+
+      if (monthDiff < 6) {
+        const index = 6 - monthDiff - 1;
+        orderMonthCounts[index] = data.count;
+        orderMonthlyRevenue[index] = data.total;
+      }
     });
 
-    // lastSixMonthsOrders.forEach((order) => {
-    //   const creationDate = order.createdAt;
-    //   const monthDiff = (today.getMonth() - creationDate.getMonth() + 12) % 12; // difference in months
-
-    //   if (monthDiff < 6) {
-    //     const monthIndex = 6 - monthDiff - 1;
-    //     orderMonthCounts[monthIndex] += 1;
-    //     orderMonthlyRevenue[monthIndex] += order.total;
-    //   }
-    // });
 
     const categoryCount = await getInventories({
       categories,
@@ -321,7 +301,7 @@ export const getPieChart = TryCatch(async (req, res, next) => {
       stockAvailability,
       revenueDistribution,
       usersAgeGroup,
-      adminCustomer, 
+      adminCustomer,
     };
 
     cache.set(key, JSON.stringify(charts));
@@ -395,7 +375,7 @@ export const getLineCharts = TryCatch(async (req, res, next) => {
     const baseQuery = {
       createdAt: { $gte: twelveMonthsAgo, $lte: today },
     };
- 
+
     const [products, users, orders] = await Promise.all([
       Product.find(baseQuery).select("createdAt"),
       User.find(baseQuery).select("createdAt"),
