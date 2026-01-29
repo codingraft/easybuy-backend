@@ -33,4 +33,10 @@ const productSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Indexes for optimization
+productSchema.index({ createdAt: -1 });
+productSchema.index({ price: 1 });
+productSchema.index({ category: 1 });
+productSchema.index({ name: "text" }); // Text index for search
+
 export const Product = mongoose.model("Product", productSchema);

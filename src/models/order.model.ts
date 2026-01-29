@@ -42,7 +42,7 @@ const orderSchema = new mongoose.Schema(
     tax: {
       type: Number,
       required: true,
-    }, 
+    },
     shippingCharges: {
       type: Number,
       required: true,
@@ -78,5 +78,10 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Indexes for optimization
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ user: 1 });
+orderSchema.index({ total: 1 });
 
 export const Order = mongoose.model("Order", orderSchema);
